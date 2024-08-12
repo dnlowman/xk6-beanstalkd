@@ -73,7 +73,10 @@ jobs:
 
     - name: Generate Tag Name
       id: generate_tag
-      run: echo "TAG_NAME=v$(date +'%Y%m%d')-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      run: |
+        # Generate a valid tag name with a prefix and short SHA
+        TAG_NAME="v$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+        echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
 
     - name: Create Release
       id: create_release
