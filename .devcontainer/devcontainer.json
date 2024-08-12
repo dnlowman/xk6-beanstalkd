@@ -1,0 +1,16 @@
+{
+    "name": "Go Development",
+    "dockerFile": "Dockerfile",
+    "forwardPorts": [11300],
+    "settings": {
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "go.gopath": "/go",
+        "go.goroot": "/usr/local/go"
+    },
+    "extensions": [
+        "golang.go"
+    ],
+    "remoteUser": "root",
+    "postCreateCommand": "go mod download && beanstalkd -l 0.0.0.0 -p 11300 &"
+}

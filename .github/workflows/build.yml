@@ -1,0 +1,93 @@
+name: Build and Test xk6-beanstalkd
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.19'
+
+    - name: Install xk6
+      run: go install go.k6.io/xk6/cmd/xk6@latest
+
+    - name: Build xk6-beanstalkd
+      run: xk6 build --with github.com/dnlowman/xk6-beanstalkd=.
+
+    - name: Start Beanstalkd
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y beanstalkd
+        sudo systemctl start beanstalkd
+
+    - name: Run test script
+      run: |
+        cat <<EOT > test.js
+        import beanstalkd from 'k6/x/beanstalkd';
+        import { check } from 'k6';
+        export default function () {
+          const client = beanstalkd.newClient('localhost:11300');
+          const jobId = client.put('Hello, Beanstalkd!', 1, 0, 60);
+          console.log(`Put job with ID: ${jobId}`);
+          const [reservedId, jobBody] = client.reserve(5);
+          console.log(`Reserved job ${reservedId}: ${jobBody}`);
+          check(jobBody, {
+            'job content is correct': (body) => body === 'Hello, Beanstalkd!',
+          });
+          client.delete(reservedId);
+          console.log('Job deleted');
+          client.close();
+        }
+        EOT
+        ./k6 run test.js
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: k6-with-beanstalkd
+        path: k6
+
+  release:
+    name: Create Release
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: k6-with-beanstalkd
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.sha }}
+        release_name: Release ${{ github.sha }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./k6
+        asset_name: k6-with-beanstalkd
+        asset_content_type: application/octet-stream
