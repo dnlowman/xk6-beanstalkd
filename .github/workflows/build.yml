@@ -14,6 +14,8 @@ jobs:
     
     steps:
     - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Ensure the full Git history is available
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -71,12 +73,22 @@ jobs:
       with:
         name: k6-with-beanstalkd
 
-    - name: Generate Tag Name
-      id: generate_tag
+    - name: Get the latest tag
+      id: get_latest_tag
+      run: echo "LATEST_TAG=$(git describe --tags --abbrev=0 || echo 'v0.0.0')" >> $GITHUB_ENV
+
+    - name: Increment version
+      id: increment_version
       run: |
-        # Generate a valid tag name with a prefix and short SHA
-        TAG_NAME="v$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
-        echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+        LATEST_TAG=${{ env.LATEST_TAG }}
+        echo "LATEST_TAG=${LATEST_TAG}"
+        # Strip the leading 'v' and split the version number
+        VERSION_NUM=${LATEST_TAG#v}
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NUM"
+        # Increment the patch version number
+        PATCH=$((PATCH + 1))
+        NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+        echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
 
     - name: Create Release
       id: create_release
@@ -84,8 +96,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ env.TAG_NAME }}  # Use the generated tag name
-        release_name: Release ${{ env.TAG_NAME }}
+        tag_name: ${{ env.NEW_TAG }}  # Use the incremented tag name
+        release_name: Release ${{ env.NEW_TAG }}
         draft: false
         prerelease: false
 
